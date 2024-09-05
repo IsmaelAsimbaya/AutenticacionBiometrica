@@ -10,16 +10,15 @@ import face_recognition
 import cv2
 import imutils
 from sklearn import neighbors
-from face_recognition.face_recognition_cli import image_files_in_folder
-from PIL import Image, UnidentifiedImageError
-#ibreria para la prueba d vida anti-spoof
+from PIL import Image
+# librería para la prueba d vida anti-spoof
 from silent_face_anti_spoofing.test import test
 
 EXTENSIONES_PERMITIDAS = {'png', 'jpg', 'jpeg'}
 
 def codificacion_rostro (rostro_array):
 
-    # Se aplica el algoritmo HOG sobre la clasificacion de JV Haar Cascade Classifier para aumentar la precision en la deteccion.
+    # Se aplica el algoritmo HOG sobre la clasificación de JV Haar Cascade Classifier para aumentar la precision en la detección.
     rostro_hog = face_recognition.face_locations(rostro_array)
 
     if len(rostro_hog) != 1:
@@ -27,7 +26,7 @@ def codificacion_rostro (rostro_array):
             "No se encontro una cara" if len(rostro_hog) < 1 else "Se encontro mas de una cara"))
         return  None
     else:
-        # retornamos la codificacion de la cara actual al conjunto de entrenamiento
+        # retornamos la codificación de la cara actual al conjunto de entrenamiento
         print('codificacion realizada')
         return face_recognition.face_encodings(rostro_array, known_face_locations=rostro_hog)[0]
     
@@ -117,7 +116,7 @@ def recolectar_codificaciones(codificaciones_path):
 
     return {'codificaciones': X_codificacionrostro_all, 'persona_id': y_personaid_all}
 
-# entrena un clasificadro k vecinos mas crecanos para reconocimiento facial
+# entrena un clasificador k vecinos mas cercanos para reconocimiento facial
 def entrenamiento_knn(data_path , model_save_path=None, n_vecinos=None, km_algortm='ball_tree'):
     # model_save_path: directorio para guardar el modelo en el disco
     # n_neighbors: la estructura de datos subyacente para admitir knn.default es ball_tree
@@ -133,7 +132,7 @@ def entrenamiento_knn(data_path , model_save_path=None, n_vecinos=None, km_algor
 
     # determinamos cuantos vecinos usar para el clasificador KNN
     if n_vecinos is None:
-        print("Eligiendo n_vecinos automaticamnete:", n_vecinos)
+        print("Eligiendo n_vecinos automáticamente:", n_vecinos)
         n_vecinos = int(round(math.sqrt(len(X_codificacionrostro))))
 
     # Crearmos y entrenamos el clasificador KNN
@@ -194,12 +193,12 @@ def anti_spoof(img_nparray):
                  model_dir=os.path.join(script_dir, 'silent_face_anti_spoofing', 'resources','anti_spoof_models'),
                  device_id=0)
     if spoof != 1:
-        raise Exception("Intento de suplantacion de identidad")
+        raise Exception("Intento de suplantación de identidad")
 
-# reconoce una imagen dadda usando un clasificadro KNN entrenado 0.47
+# reconoce una imagen dada usando un clasificador KNN entrenado 0.47
 def predict_img(auth_img_nparray, modelknn_path=None, distance_threshold=0.47):
     # auth_img_nparray: nparray de la imagen a procesar
-    # modelknn_path: camino a un clasificador knn pre entrnado. si no se especifica, model_save_path debe ser knn_clsf.
+    # modelknn_path: directorio de un clasificador knn pre entrando. si no se especifica, model_save_path debe ser knn_clsf.
     # distance_threshold: Umbral de distancia para la clasificación de rostros. cuanto más grande es, más posibilidades
     #                     de clasificar erróneamente a una persona desconocida como conocida.
     # retornamos una lista de nombres y locaciones de caras para las caras reconocidas en la imagen
