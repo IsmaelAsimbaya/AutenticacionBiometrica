@@ -1,10 +1,19 @@
 from reconocimientoFacial import captura_codificacion_rostros_video, entrenamiento_knn, face_rec
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
 import shutil
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
