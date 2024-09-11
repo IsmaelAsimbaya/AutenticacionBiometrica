@@ -10,7 +10,7 @@ import face_recognition
 import cv2
 import imutils
 from sklearn import neighbors
-from PIL import Image
+from PIL import Image, ImageOps
 # librería para la prueba d vida anti-spoof
 from silent_face_anti_spoofing.test import test
 
@@ -157,11 +157,25 @@ def verificar_imagen_numpy(imagen_np):
     if imagen_np.dtype != np.uint8:
         return False
     return True
-    
-def redimension(imagen_original, nuevo_ancho = 500):
-    ancho_original, alto_original = imagen_original.size
-    nuevo_alto = int(alto_original * nuevo_ancho / ancho_original)
-    return np.array(imagen_original.resize((nuevo_ancho, nuevo_alto)))
+
+def redimension(imagen_original):
+    ancho, alto = imagen_original.size
+    target_ratio = 3 / 4
+    current_ratio = ancho / alto
+    if current_ratio == target_ratio:
+        return imagen_original
+    if current_ratio > target_ratio:
+        nuevo_ancho = int(alto * target_ratio)
+        izquierda = (ancho - nuevo_ancho) // 2
+        derecha = ancho - izquierda
+        imagen_cortada = imagen_original.crop((izquierda, 0, derecha, alto))
+    else:
+        nuevo_alto = int(ancho / target_ratio)
+        arriba = (alto - nuevo_alto) // 2
+        abajo = alto - arriba
+        imagen_cortada = imagen_original.crop((0, arriba, ancho, abajo))
+    imagen_np = np.array(imagen_cortada)
+    return imagen_np
 
 def carga_imagen_base64(img_base64):
     try:
@@ -188,12 +202,20 @@ def carga_imagen_url(img_url):
         return None
 
 def anti_spoof(img_nparray):
+    predicts = []
     script_dir = os.path.dirname(os.path.abspath(__file__))
     spoof = test(img_nparray,
                  model_dir=os.path.join(script_dir, 'silent_face_anti_spoofing', 'resources','anti_spoof_models'),
                  device_id=0)
     if spoof != 1:
-        raise Exception("Intento de suplantación de identidad")
+        predicts.append({
+            "label": "spoof",
+            "location": None,
+            "distance": None,
+            "match": False
+        })
+        return predicts
+    return predicts
 
 # reconoce una imagen dada usando un clasificador KNN entrenado 0.47
 def predict_img(auth_img_nparray, modelknn_path=None, distance_threshold=0.47):
@@ -204,30 +226,50 @@ def predict_img(auth_img_nparray, modelknn_path=None, distance_threshold=0.47):
     # retornamos una lista de nombres y locaciones de caras para las caras reconocidas en la imagen
     # para las caras no reconocidas se retorna el nombre de "unknown"
 
+    predicts = anti_spoof(auth_img_nparray)
+
+    if predicts:
+        return predicts
+
     if modelknn_path is None:
         raise Exception("Debe proporcionar el clasificador knn")
 
     with open(modelknn_path, 'rb') as f:
         knn_clsf = pickle.load(f)
 
-    # cargamos la imagen y encontramos la posicion de las caras
+    # cargamos la imagen y encontramos la posición de las caras
     X_face_locations = face_recognition.face_locations(auth_img_nparray)
 
-    # si no encontramos caras en la imagen, retornamos una lista vacia
+    # si no encontramos rostros en la imagen, retornamos una lista vacía
     if len(X_face_locations) == 0:
-        return []
+        predicts.append({
+            "label": "empty",
+            "location": None,
+            "distance": None,
+            "match": False
+        })
+        return predicts
     
     # encontramos las codificaciones para las caras en la imagen de test
     faces_encodings = face_recognition.face_encodings(auth_img_nparray, known_face_locations=X_face_locations)
-    # usamos el modelo KNN para encontrar las mejores coincidencias para la iamgen de test
+    # encontramos las distancias entre cada codificación facial de la imagen de prueba y su vecino más cercano en el modelo KNN
     closest_distances = knn_clsf.kneighbors(faces_encodings, n_neighbors=1)
-    print(closest_distances)
+    # se clasifican las distancias según el umbral establecido
     are_matches = [closest_distances[0][i][0] <= distance_threshold for i in range(len(X_face_locations))]
-    print(are_matches)
 
-    # predecimos las clases y removemos las clasificaiones que no estan en el humbral
-    return [(pred, loc) if rec else ("unknown", loc) for pred, loc, rec in
-            zip(knn_clsf.predict(faces_encodings), X_face_locations, are_matches)]
+    # predecimos las clases y asignamos unknown a las clasificaciones que no están en el umbral
+    for i in range(len(X_face_locations)):
+        pred_label = knn_clsf.predict([faces_encodings[i]])[0]
+        pred_distance = closest_distances[0][i][0]
+        is_match = are_matches[i]
+        face_location = X_face_locations[i]
+        predicts.append({
+            "label": pred_label if is_match else "unknown",
+            "location": face_location,
+            "distance": pred_distance,
+            "match": is_match
+        })
+    return predicts
 
 def face_rec(image_source, id_predict, source_type = None):
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -244,11 +286,17 @@ def face_rec(image_source, id_predict, source_type = None):
         print("Tipo de origen no soportado. Usa 'url' o 'base64'.")
         return None
 
-    for name, (top, right, bottom, left) in prediccion:
-        print("- Found {} at ({}, {})".format(name, left, top))
-        if name == id_predict:
-            return True
-    return False
+    for pred in prediccion:
+        if pred['label'] == id_predict:
+            return {
+                "label": pred['label'],
+                "location": pred['location'],
+                "distance": pred['distance'],
+                "match": True
+            }
+        else:
+            pred['match'] = False
+    return prediccion[0]
 
 if __name__ == "__main__":
 

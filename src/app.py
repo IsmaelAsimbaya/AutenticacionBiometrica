@@ -77,8 +77,8 @@ async def entrenar_knn(data: KNNTrainingData):
 @app.post("/reconocer_rostro/")
 async def reconocer_rostro(data: ReconocimientoData):
     try:
-        success = face_rec(data.image_source, data.id_predict, data.source_type)
-        return {"success": success}
+        resultado  = face_rec(data.image_source, data.id_predict, data.source_type)
+        return resultado
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
